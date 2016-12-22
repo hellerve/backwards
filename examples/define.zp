@@ -1,0 +1,4 @@
+(define (double-and-print arg)
+  (write (* arg 2)))
+
+(double-and-print 14)

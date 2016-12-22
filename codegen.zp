@@ -1,0 +1,93 @@
+(define prologue
+"function plus() {
+  return [].slice.call(arguments).reduce(function(a, b){return a + b;});
+}
+function times() {
+  return [].slice.call(arguments).reduce(function(a, b){return a * b;});
+}
+function div() {
+  return [].slice.call(arguments).reduce(function(a, b){return a / b;});
+}
+function sub() {
+  return [].slice.call(arguments).reduce(function(a, b){return a - b;});
+}
+function concat() {
+  throw new Error('Not implemented yet!');
+}
+")
+(define (collec val)
+  (string:join (map codegen (val :value)) ", "))
+
+(define (dict val)
+  (string:join (map ($ (++ (codegen (car %)) ": " (codegen (cadr %))))
+                    (val :value))
+               ", "))
+
+(define (to-camel name)
+  (let ((to-replace (regex:groups r/(-\w)/ name)))
+    (if (null? to-replace)
+      name
+      (reduce (lambda (str pattern)
+                (string:substitute str (car pattern)
+                                (->string (char:upper-case (cadar pattern)))))
+              name
+              to-replace))))
+
+(define (function name)
+  (to-camel (regex:gsub r/:/ "." (->string name))))
+
+(define (fun-name fun)
+  (case fun
+    ((+) "plus")
+    ((*) "times")
+    ((/) "div")
+    ((-) "sub")
+    ((++) "concat")
+    ((eqv?) "==")
+    ((eq?) "===")
+    ((write display) "console.log")
+    ((error) "console.error")
+    (else (function fun))))
+
+(define (treat-app val)
+  (let ((fun (val :function)))
+    (if (eq? (fun :type) :symbol)
+      (++ (fun-name ((val :function) :value)) "("
+          (string:join (map codegen (val :arguments)) ", ") ")")
+      (++ (codegen fun) "["
+          (string:join (map codegen (val :arguments)) ", ") "]"))))
+
+(define (codegen val)
+  (case (val :type)
+    ((:string :char) (++ "\"" (val :value) "\""))
+    ((:atom) (++ "\"" (cdr (->string (val :value))) "\""))
+    ((:list :vector) (++ "[" (collec val) "]"))
+    ((:hash-map) (++ "{" (dict val) "}"))
+    ((:byte-vector) (++ "new Uint8Array([" (collec val) "])"))
+    ((:complex)
+      (error:from-string "Complex numbers are not supported by this backend"))
+    ((:rational)
+      (->string (* 1.0 (val :value))))
+    ((:application) (treat-app val))
+    ((:define-val)
+      (++ "var " (->string (val :name)) " = " (codegen (val :binding)) ";"))
+    ((:define-fn)
+      (++ "function " (codegen (val :name))
+          "(" (string:join (map codegen (val :arguments)) ", ") ") {\n"
+            "return " (codegen (val :body)) ";\n"
+          "}"))
+    ((:seq)
+      (let ((ins (map codegen (val :arguments))))
+        (++ "(function() {\n"
+              (string:join (list:but-last ins) ";\n") "\n"
+              "return " (list:last ins) ";\n})")))
+    ((:lambda)
+      (++ "function(" (string:join (map codegen (val :arguments)) ", ") ") {"
+          "return " (codegen (val :body)) ";"
+          "}"))
+    ((:symbol) (function (val :value)))
+    ((:regex) (++ "/" (regex:pattern (val :value)) "/"))
+    (else (->string (val :value)))))
+
+(zepto:implements-codegen :js codegen prologue)
+(write (zepto:run-compiler))

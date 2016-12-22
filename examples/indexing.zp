@@ -1,0 +1,2 @@
+(write (#{:key "hash-val"} :key))
+(write ({"vec-val"} 0))
