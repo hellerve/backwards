@@ -1,27 +1,18 @@
-(define prologue
-"function plus() {
-  return [].slice.call(arguments).reduce(function(a, b){return a + b;});
-}
-function times() {
-  return [].slice.call(arguments).reduce(function(a, b){return a * b;});
-}
-function div() {
-  return [].slice.call(arguments).reduce(function(a, b){return a / b;});
-}
-function sub() {
-  return [].slice.call(arguments).reduce(function(a, b){return a - b;});
-}
+(define prologue "
 function concat() {
   throw new Error('Not implemented yet!');
 }
 ")
+
+(define (join args . joinr)
+  (let ((joinr (get-from joinr 0 ", ")))
+    (string:join args joinr)))
+
 (define (collec val)
-  (string:join (map codegen (val :value)) ", "))
+  (join (map codegen (val :value))))
 
 (define (dict val)
-  (string:join (map ($ (++ (codegen (car %)) ": " (codegen (cadr %))))
-                    (val :value))
-               ", "))
+  (join (map ($ (++ (codegen (car %)) ": " (codegen (cadr %)))) (val :value))))
 
 (define (to-camel name)
   (let ((to-replace (regex:groups r/(-\w)/ name)))
@@ -37,28 +28,48 @@ function concat() {
   (to-camel (regex:gsub r/:/ "." (->string name))))
 
 (define (fun-name fun)
-  (case fun
-    ((+) "plus")
-    ((*) "times")
-    ((/) "div")
-    ((-) "sub")
-    ((++) "concat")
-    ((eqv?) "==")
-    ((eq?) "===")
-    ((->string) "new String")
-    ((write display) "console.log")
-    ((error) "console.error")
-    (else (function fun))))
+  (let ((mkfun (lambda (name) (make-hash :name name :type :fun)))
+        (mkop  (lambda (name) (make-hash :name name :type :op)))
+        (mkprop  (lambda (name) (make-hash :name name :type :prop))))
+    (case fun
+      ((+) (mkop "+"))
+      ((*) (mkop "*"))
+      ((/) (mkop "/"))
+      ((-) (mkop "-"))
+      ((>) (mkop ">"))
+      ((>=) (mkop ">="))
+      ((<=) (mkop "<="))
+      ((<) (mkop "<"))
+      ((/= <>) (mkop "!="))
+      ((++) (mkfun "concat"))
+      ((eqv?) (mkop "=="))
+      ((eq? =) (mkop "==="))
+      ((->string) (mkprop "toString"))
+      ((write newline) (mkfun "console.log"))
+      ((display) (mkfun "process.stdout.write"))
+      ((error) (mkfun "console.error"))
+      (else (mkfun (function fun))))))
 
 (define (treat-app val)
-  (let ((fun (val :function))
-        (args (string:join (map codegen (val :arguments)) ", ")))
+  (let* ((fun (val :function))
+         (args (map codegen (val :arguments)))
+         (args-joined (join args)))
     (case (fun :type)
       ((:symbol)
-        (++ (fun-name (fun :value)) "(" args ")"))
+        (let ((fun (fun-name (fun :value))))
+          (case (fun :type)
+            ((:fun)
+              (++ (fun :name) "(" args-joined ")"))
+            ((:op)
+              (string:join args (++ " " (fun :name) " ")))
+            ((:prop)
+              (++ (car args) "." (fun :name) "(" (join (cdr args)) ")"))
+            (else
+              (error:from-string
+                (++ "Got a bad form in function application: " fun))))))
       ((:lambda :define-fun)
-        (++ "(" (codegen fun) ")(" args ")"))
-      (else (++ (codegen fun) "[" args "]")))))
+        (++ "(" (codegen fun) ")(" args-joined ")"))
+      (else (++ (codegen fun) "[" args-joined "]")))))
 
 (define (codegen val)
   (case (val :type)
@@ -76,21 +87,31 @@ function concat() {
       (++ "var " (->string (val :name)) " = " (codegen (val :binding)) ";"))
     ((:define-fn)
       (++ "function " (codegen (val :name))
-          "(" (string:join (map codegen (val :arguments)) ", ") ") {\n"
+          "(" (join (map codegen (val :arguments))) ") {\n"
             "return " (codegen (val :body)) ";\n"
           "}"))
     ((:seq)
       (let ((ins (map codegen (val :arguments))))
         (++ "(function() {\n"
-              (string:join (list:but-last ins) ";\n") "\n"
+              (join (list:but-last ins) ";\n") "\n"
               "return " (list:last ins) ";\n})()")))
     ((:lambda)
-      (++ "function(" (string:join (map codegen (val :arguments)) ", ") ") {"
+      (++ "function(" (join (map codegen (val :arguments))) ") {"
           "return " (codegen (val :body)) ";"
           "}"))
     ((:symbol) (function (val :value)))
     ((:regex) (++ "/" (regex:pattern (val :value)) "/"))
+    ((:nil) "null")
+    ((:if) (++ "(function() {\n"
+               "if (" (codegen (val :cond)) ") {\n"
+               "return " (codegen (val :then)) ";\n"
+               "} else {\n"
+               "return " (codegen (val :else)) ";\n"
+               "}})()"))
     (else (->string (val :value)))))
 
-(zepto:implements-codegen :js codegen prologue)
+(define conf (make-hash :definitions  prologue
+                        :macro-expand #t))
+
+(zepto:implements-codegen :js codegen conf)
 (write (zepto:run-compiler))
