@@ -1,2 +1,3 @@
 (write (#{:key "hash-val"} :key))
 (write ({"vec-val"} 0))
+(write ((lambda (x) x) "function-application"))

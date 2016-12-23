@@ -51,12 +51,14 @@ function concat() {
     (else (function fun))))
 
 (define (treat-app val)
-  (let ((fun (val :function)))
-    (if (in? [:symbol :lambda :define-fun] (fun :type))
-      (++ (fun-name ((val :function) :value)) "("
-          (string:join (map codegen (val :arguments)) ", ") ")")
-      (++ (codegen fun) "["
-          (string:join (map codegen (val :arguments)) ", ") "]"))))
+  (let ((fun (val :function))
+        (args (string:join (map codegen (val :arguments)) ", ")))
+    (case (fun :type)
+      ((:symbol)
+        (++ (fun-name (fun :value)) "(" args ")"))
+      ((:lambda :define-fun)
+        (++ "(" (codegen fun) ")(" args ")"))
+      (else (++ (codegen fun) "[" args "]")))))
 
 (define (codegen val)
   (case (val :type)
