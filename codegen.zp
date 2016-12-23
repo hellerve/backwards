@@ -45,6 +45,7 @@ function concat() {
     ((++) "concat")
     ((eqv?) "==")
     ((eq?) "===")
+    ((->string) "new String")
     ((write display) "console.log")
     ((error) "console.error")
     (else (function fun))))

@@ -4,6 +4,6 @@
 (write "1")
 (write [1 1 1])
 (write {1 1 1})
-(write b{1 1 1})
+(write (->string b{1 1 1}))
 (write #{1 1})
 (write r/1/)
