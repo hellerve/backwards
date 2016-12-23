@@ -1,6 +1,27 @@
-(define prologue "
-function concat() {
-  throw new Error('Not implemented yet!');
+(define prologue "function concat() {
+  var concattr = function(a,b) {
+    if (a.constructor === Array) {
+      return a.concat(b);
+    } else if (a.constructor === String) {
+      return a + b;
+    } else if (a.length !== undefined && b.length !== undefined) {
+      var c = new a.constructor(a.length + b.length);
+      c.set(a);
+      c.set(b, a.length);
+
+      return c;
+    } else {
+      var c = new a.constructor(a.length + 1);
+      c.set(a);
+      c.set(new a.constructor([b]), a.length);
+
+      return c;
+    }
+  }
+  var ary = [].slice.call(arguments);
+  if (ary.length) {
+    return ary.slice(1).reduce(concattr, ary[0]);
+  }
 }
 ")
 
@@ -114,4 +135,4 @@ function concat() {
                         :macro-expand #t))
 
 (zepto:implements-codegen :js codegen conf)
-(write (zepto:run-compiler))
+(zepto:run-compiler :js)
