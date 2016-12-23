@@ -1,0 +1,6 @@
+(define (string:join x)
+  (if (null? x)
+    ""
+    (++ (car x) (string:join (cdr x)))))
+
+(write (string:join ["1" "2" "3"]))
