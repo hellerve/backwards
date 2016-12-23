@@ -52,7 +52,7 @@ function concat() {
 
 (define (treat-app val)
   (let ((fun (val :function)))
-    (if (eq? (fun :type) :symbol)
+    (if (in? [:symbol :lambda :define-fun] (fun :type))
       (++ (fun-name ((val :function) :value)) "("
           (string:join (map codegen (val :arguments)) ", ") ")")
       (++ (codegen fun) "["
@@ -81,7 +81,7 @@ function concat() {
       (let ((ins (map codegen (val :arguments))))
         (++ "(function() {\n"
               (string:join (list:but-last ins) ";\n") "\n"
-              "return " (list:last ins) ";\n})")))
+              "return " (list:last ins) ";\n})()")))
     ((:lambda)
       (++ "function(" (string:join (map codegen (val :arguments)) ", ") ") {"
           "return " (codegen (val :body)) ";"
