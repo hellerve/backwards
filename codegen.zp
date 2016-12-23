@@ -23,13 +23,13 @@
     return ary.slice(1).reduce(concattr, ary[0]);
   }
 }
-function empty(x) {
+function isNull(x) {
   return x.length == 0;
 }
-function first(x) {
+function car(x) {
   return x[0];
 }
-function rest(x) {
+function cdr(x) {
   return x.slice(1);
 }
 ")
@@ -74,9 +74,9 @@ function rest(x) {
       ((++) (mkfun "concat"))
       ((eqv?) (mkop "=="))
       ((eq? =) (mkop "==="))
-      ((null?) (mkfun "empty"))
-      ((car) (mkfun "first"))
-      ((cdr) (mkfun "rest"))
+      ((null?) (mkfun "isNull"))
+      ((head) (mkfun "car"))
+      ((tail) (mkfun "cdr"))
       ((->string) (mkprop "toString"))
       ((write newline) (mkfun "console.log"))
       ((display) (mkfun "process.stdout.write"))
