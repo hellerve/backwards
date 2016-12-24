@@ -117,7 +117,8 @@ function cdr(x) {
       (->string (* 1.0 (val :value))))
     ((:application) (treat-app val))
     ((:define-val)
-      (++ "var " (->string (val :name)) " = " (codegen (val :binding)) ";"))
+      (++ "var " (function (->string (val :name))) " = "
+          (codegen (val :binding)) ";"))
     ((:define-fn)
       (++ "function " (codegen (val :name))
           "(" (join (map codegen (val :arguments))) ") {\n"

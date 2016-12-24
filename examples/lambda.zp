@@ -1,0 +1,1 @@
+(define lam (lambda (x) x))
