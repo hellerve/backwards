@@ -1,0 +1,4 @@
+; accessing the node runtime from zepto to make a file echo its own contents
+(define x (require "fs"))
+
+(write (->string ((x "readFileSync") "examples/node.zp")))
