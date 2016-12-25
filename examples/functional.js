@@ -1,0 +1,136 @@
+(define (id obj)
+  obj)
+
+(define (inf? obj)
+  (if (and (number? obj) (inexact? obj))
+    (= obj (* obj 10))
+    #f))
+
+(define (flip func)
+  (lambda (arg1 arg2)
+    (func arg2 arg1)))
+
+(define (curry f . args)
+  (lambda inner
+    (apply f (++ args inner))))
+
+(define (compose f g . args)
+  (let ((constructed (lambda args (f (apply g args)))))
+    (if (null? args)
+      constructed
+      (apply compose (cons constructed args)))))
+
+(define (foldr func end l)
+  (if (list:null? l)
+    end
+    (func (list:car l) (foldr func end (list:cdr l)))))
+
+(define (foldr1 func l)
+  (foldr func (car l) (cdr l)))
+
+(define (foldl1 func l)
+  (foldl func (car l) (cdr l)))
+
+(define (sum . l)
+  (fold + 0 l))
+
+(define (product . l)
+  (fold * 1 l))
+
+(define (for-each proc . lists)
+  (define (unzip1-with-cdr . lists)
+    (unzip1-with-cdr-iterative lists '() '()))
+  (define (unzip1-with-cdr-iterative lists cars cdrs)
+    (if (null? lists)
+        (cons cars cdrs)
+        (let ((car1 (caar lists))
+          (cdr1 (cdar lists)))
+      (unzip1-with-cdr-iterative 
+       (cdr lists) 
+       (append cars car1)
+       (append cdrs cdr1)))))
+
+  (if (null? lists)
+      []
+      (if (any? null? lists)
+        []
+        (let* ((unz (apply unzip1-with-cdr lists))
+               (cars (car unz))
+               (cdrs (cdr unz)))
+          (cons
+            (apply proc cars)
+            (apply for-each (cons proc cdrs)))))))
+
+(define (falsy? val)
+  (cond
+    ((boolean? val) (not val))
+    ((hash-map? val) (list:null? (hash:keys val)))
+    ((list? val) (list:null? val))
+    ((vector? val) (eqv? {} val))
+    ((byte-vector? val) (eqv? #() val))
+    ((string? val) (eqv? "" val))
+    ((number? val) (eqv? 0 val))
+    (else #t)))
+
+(define (truthy? val)
+  (not (falsy? val)))
+
+(define (constantly x)
+  (lambda args x))
+
+(define (juxt . fs)
+  (lambda args (map ($ (apply % args)) fs)))
+
+(define (memoize f)
+  (let ((cache #{}))
+    (lambda args
+      (let ((sargs (make-simple-list args)))
+        (if (in? cache sargs)
+          (cache sargs)
+          (let ((res (apply f args)))
+            (begin
+              (hash:set! cache sargs res)
+              res)))))))
+
+(define (partition n c)
+  (define (internal acc tmp src)
+    (cond
+      ((null? src) acc)
+      ((eq? (length tmp) n) (internal (+= acc tmp) (list (car src)) (cdr src)))
+      (else (internal acc (++ tmp (car src)) (cdr src)))))
+  (internal [] [] c))
+
+(define (partition-all n c)
+  (define (internal acc tmp src)
+    (cond
+      ((null? src) (+= acc tmp))
+      ((eq? (length tmp) n) (internal (+= acc tmp) (list (car src)) (cdr src)))
+      (else (internal acc (++ tmp (car src)) (cdr src)))))
+  (internal [] [] c))
+
+(define (callable? obj)
+  (or (function? obj) (primitive? obj)))
+
+(define (ignoring pred f)
+  (lambda args
+    (apply f (filter ($ (not (pred %))) args))))
+
+(define (ignoring-nils f)
+  (ignoring nil? f))
+
+(define (rate-limited f period)
+  (let ((last-call 0))
+    (lambda args
+      (let* ((time (unix-timestamp))
+             (cur (/ (+ (* (car time) 1000000000) (cadr time)) 1000000)))
+        (if (< (+ period last-call) cur)
+          (begin
+            (set! last-call cur)
+            (apply f args)))))))
+
+(define (unfold next seed)
+  (let loop ((acc [])
+             (nval (apply next seed)))
+    (if (nil? nval)
+      acc
+      (loop (++ acc (car nval)) (apply next (cadr nval))))))

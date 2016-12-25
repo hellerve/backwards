@@ -1,4 +1,16 @@
-(define prologue "function concat() {
+(define prologue "function add() {
+  return [].slice.call(arguments).reduce(function(a,b) {return a + b}, 0);
+}
+function mult() {
+  return [].slice.call(arguments).reduce(function(a,b) {return a * b}, 1);
+}
+function div() {
+  return [].slice.call(arguments, 1).reduce(function(a,b) {return a / b}, arguments[0]);
+}
+function sub() {
+  return [].slice.call(arguments, 1).reduce(function(a,b) {return a - b}, arguments[0]);
+}
+function concat() {
   var concattr = function(a,b) {
     if (a.constructor === Array) {
       return a.concat(b);
@@ -32,7 +44,18 @@ function car(x) {
 function cdr(x) {
   return x.slice(1);
 }
+function apply(x) {
+  return x.apply(null, [].slice.call(arguments, 1));
+}
 ")
+
+(define trans
+  #{"+" "add"
+    "*" "mult"
+    "/" "div"
+    "-" "sub"
+    "%" "gen"
+    "++" "concat"})
 
 (define (join args . joinr)
   (let ((joinr (get-from joinr 0 ", ")))
@@ -54,8 +77,16 @@ function cdr(x) {
               name
               to-replace))))
 
+(define (no-interrobang str)
+  (|> str
+      ($ (if (string:ends-with str "!") (++ "unsafe" (but-last str)) str))
+      ($ (if (string:ends-with str "?") (++ "is" (but-last str)) str))))
+
 (define (function name)
-  (to-camel (regex:gsub r/:/ "-" (->string name))))
+  (let ((name (->string name)))
+    (if (in? trans name)
+      (trans name)
+      (to-camel (no-interrobang (regex:gsub r/:/ "-" name))))))
 
 (define (fun-name fun)
   (let ((mkfun (lambda (name) (make-hash :name name :type :fun)))
@@ -74,18 +105,28 @@ function cdr(x) {
       ((++) (mkfun "concat"))
       ((eqv?) (mkop "=="))
       ((eq? =) (mkop "==="))
-      ((null?) (mkfun "isNull"))
-      ((head) (mkfun "car"))
-      ((tail) (mkfun "cdr"))
+      ((set!) (mkop "="))
+      ((null? list:null?) (mkfun "isNull"))
+      ((head list:car) (mkfun "car"))
+      ((tail list:cdr) (mkfun "cdr"))
       ((->string) (mkprop "toString"))
       ((write newline) (mkfun "console.log"))
       ((display) (mkfun "process.stdout.write"))
       ((error) (mkfun "console.error"))
       (else (mkfun (function fun))))))
 
+(define (arg-list args)
+  (if (list? args)
+    (let ((gen (map codegen args)))
+      (if (any? ($ (eq? (% :type) :rest)) args)
+        (++ (list:sublist gen 0 (- (length gen) 2))
+            (++ "..." (list:last gen)))
+        gen))
+    (list (++ "..." (function (args :value))))))
+
 (define (treat-app val)
   (let* ((fun (val :function))
-         (args (map codegen (val :arguments)))
+         (args (arg-list (val :arguments)))
          (args-joined (join args)))
     (case (fun :type)
       ((:symbol)
@@ -121,7 +162,7 @@ function cdr(x) {
           (codegen (val :binding)) ";"))
     ((:define-fn)
       (++ "function " (codegen (val :name))
-          "(" (join (map codegen (val :arguments))) ") {\n"
+          "(" (join (arg-list (val :arguments))) ") {\n"
             "return " (codegen (val :body)) ";\n"
           "}"))
     ((:seq)
@@ -130,9 +171,10 @@ function cdr(x) {
               (join (list:but-last ins) ";\n") "\n"
               "return " (list:last ins) ";\n})()")))
     ((:lambda)
-      (++ "function(" (join (map codegen (val :arguments))) ") {"
-          "return " (codegen (val :body)) ";"
-          "}"))
+      (let ((args (arg-list (val :arguments))))
+        (++ "function(" (join args) ") {"
+            "return " (codegen (val :body)) ";"
+            "}")))
     ((:symbol) (function (val :value)))
     ((:regex) (++ "/" (regex:pattern (val :value)) "/"))
     ((:nil) "null")
@@ -148,4 +190,7 @@ function cdr(x) {
                         :macro-expand #t))
 
 (zepto:implements-codegen :js codegen conf)
-(zepto:run-compiler :js)
+(define res (catch-vm-error '(zepto:run-compiler :js)))
+
+(if (error? res)
+  (write res))
