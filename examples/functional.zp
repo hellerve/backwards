@@ -128,6 +128,9 @@
             (set! last-call cur)
             (apply f args)))))))
 
+; pulled out to make unfold work
+(define cadr (compose car cdr))
+
 (define (unfold next seed)
   (let loop ((acc [])
              (nval (apply next seed)))
