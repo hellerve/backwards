@@ -95,7 +95,7 @@
 (define (partition n c)
   (define (internal acc tmp src)
     (cond
-      ((null? src) acc)
+      ((null? src) (if (eq? (length tmp) n) (+= acc tmp) acc))
       ((eq? (length tmp) n) (internal (+= acc tmp) (list (car src)) (cdr src)))
       (else (internal acc (++ tmp (car src)) (cdr src)))))
   (internal [] [] c))

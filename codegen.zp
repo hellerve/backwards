@@ -10,6 +10,9 @@ function div() {
 function sub() {
   return [].slice.call(arguments, 1).reduce(function(a,b) {return a - b}, arguments[0]);
 }
+function isnil(val) {
+  return val === null;
+}
 function concat() {
   var concattr = function(a,b) {
     if (a.constructor === Array) {
@@ -35,6 +38,27 @@ function concat() {
     return ary.slice(1).reduce(concattr, ary[0]);
   }
 }
+function conj() {
+  var concattr = function(a,b) {
+    if (a.constructor === Array) {
+      var c = Object.assign([], a);
+      c.push(b);
+      return c;
+    } else if (a.constructor === String) {
+      return a + b;
+    } else {
+      var c = new a.constructor(a.length + 1);
+      c.set(a);
+      c.set(b, a.length);
+
+      return c;
+    }
+  }
+  var ary = [].slice.call(arguments);
+  if (ary.length) {
+    return ary.slice(1).reduce(concattr, ary[0]);
+  }
+}
 function isNull(x) {
   return x.length == 0;
 }
@@ -45,7 +69,7 @@ function cdr(x) {
   return x.slice(1);
 }
 function apply(x) {
-  return x.apply(null, [].slice.call(arguments, 1));
+  return x.apply(null, [].slice.call(arguments, 1).reduce(function(a,b){return a.concat(b)}, []));
 }
 ")
 
@@ -55,7 +79,8 @@ function apply(x) {
     "/" "div"
     "-" "sub"
     "%" "gen"
-    "++" "concat"})
+    "++" "conj"
+    "+=" "concat"})
 
 (define (join args . joinr)
   (let ((joinr (get-from joinr 0 ", ")))
@@ -89,8 +114,10 @@ function apply(x) {
       (to-camel (no-interrobang (regex:gsub r/:/ "-" name))))))
 
 (define (fun-name fun)
-  (let ((mkfun (lambda (name) (make-hash :name name :type :fun)))
-        (mkop  (lambda (name) (make-hash :name name :type :op)))
+  (let ((mkfun   (lambda (name) (make-hash :name name :type :fun)))
+        (mkop    (lambda (name) (make-hash :name name :type :op)))
+        (mktrans (lambda (fun)  (make-hash :fun  fun  :type :trans)))
+        (mkpropc (lambda (name) (make-hash :name name :type :propc)))
         (mkprop  (lambda (name) (make-hash :name name :type :prop))))
     (case fun
       ((+) (mkop "+"))
@@ -103,13 +130,16 @@ function apply(x) {
       ((<) (mkop "<"))
       ((/= <>) (mkop "!="))
       ((++) (mkfun "concat"))
+      ((+=) (mkfun "conj"))
+      ((list) (mktrans ($ (++ "[" (string:join % ", ") "]"))))
       ((eqv?) (mkop "=="))
       ((eq? =) (mkop "==="))
       ((set!) (mkop "="))
       ((null? list:null?) (mkfun "isNull"))
       ((head list:car) (mkfun "car"))
       ((tail list:cdr) (mkfun "cdr"))
-      ((->string) (mkprop "toString"))
+      ((->string) (mkpropc "toString"))
+      ((length) (mkprop "length"))
       ((write newline) (mkfun "console.log"))
       ((display) (mkfun "process.stdout.write"))
       ((error) (mkfun "console.error"))
@@ -137,7 +167,11 @@ function apply(x) {
             ((:op)
               (string:join args (++ " " (fun :name) " ")))
             ((:prop)
+              (++ (car args) "." (fun :name)))
+            ((:propc)
               (++ (car args) "." (fun :name) "(" (join (cdr args)) ")"))
+            ((:trans)
+              ((fun :fun) args))
             (else
               (error:from-string
                 (++ "Got a bad form in function application: " fun))))))
