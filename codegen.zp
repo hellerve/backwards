@@ -212,18 +212,16 @@ function apply(x) {
           "}"))
     ((:seq)
       (let ((ins (map codegen (val :arguments))))
-        (++ "(function() {\n"
+        (++ "(() => {\n"
               (join (list:but-last ins) ";\n") "\n"
               "return " (list:last ins) ";\n})()")))
     ((:lambda)
       (let ((args (arg-list (val :arguments))))
-        (++ "function(" (join args) ") {"
-            "return " (codegen (val :body)) ";"
-            "}")))
+        (++ "(" (join args) ") => \n" (codegen (val :body)))))
     ((:symbol) (function (val :value)))
     ((:regex) (++ "/" (regex:pattern (val :value)) "/"))
     ((:nil) "null")
-    ((:if) (++ "(function() {\n"
+    ((:if) (++ "(() => {\n"
                "if (" (codegen (val :cond)) ") {\n"
                "return " (codegen (val :then)) ";\n"
                "} else {\n"
