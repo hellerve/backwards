@@ -1,14 +1,14 @@
 (define prologue "function add() {
-  return [].slice.call(arguments).reduce(function(a,b) {return a + b}, 0);
+  return Array.from(arguments).reduce((a,b) => a + b, 0);
 }
 function mult() {
-  return [].slice.call(arguments).reduce(function(a,b) {return a * b}, 1);
+  return Array.from(arguments).reduce((a,b) => a * b, 1);
 }
 function div() {
-  return [].slice.call(arguments, 1).reduce(function(a,b) {return a / b}, arguments[0]);
+  return [].slice.call(arguments, 1).reduce((a,b) => a / b, arguments[0]);
 }
 function sub() {
-  return [].slice.call(arguments, 1).reduce(function(a,b) {return a - b}, arguments[0]);
+  return [].slice.call(arguments, 1).reduce((a,b) => a - b, arguments[0]);
 }
 function isnil(val) {
   return val === null;
@@ -33,7 +33,7 @@ function concat() {
       return c;
     }
   }
-  var ary = [].slice.call(arguments);
+  var ary = Array.from(arguments);
   if (ary.length) {
     return ary.slice(1).reduce(concattr, ary[0]);
   }
@@ -54,10 +54,16 @@ function conj() {
       return c;
     }
   }
-  var ary = [].slice.call(arguments);
+  var ary = Array.from(arguments);
   if (ary.length) {
     return ary.slice(1).reduce(concattr, ary[0]);
   }
+}
+function guess(x, ...args) {
+  if (x.constructor === Array || x.constructor === Object) {
+    return args.reduce((a,b) => a[b], x);
+  }
+  return apply(x, args);
 }
 function isNull(x) {
   return x.length == 0;
@@ -69,7 +75,7 @@ function cdr(x) {
   return x.slice(1);
 }
 function apply(x) {
-  return x.apply(null, [].slice.call(arguments, 1).reduce(function(a,b){return a.concat(b)}, []));
+  return x.apply(null, [].slice.call(arguments, 1).reduce((a,b) => a.concat(b), []));
 }
 ")
 
@@ -115,6 +121,7 @@ function apply(x) {
 
 (define (fun-name fun)
   (let ((mkfun   (lambda (name) (make-hash :name name :type :fun)))
+        (mkunkwn (lambda (name) (make-hash :name name :type :unknown)))
         (mkop    (lambda (name) (make-hash :name name :type :op)))
         (mktrans (lambda (fun)  (make-hash :fun  fun  :type :trans)))
         (mkpropc (lambda (name) (make-hash :name name :type :propc)))
@@ -143,7 +150,7 @@ function apply(x) {
       ((write newline) (mkfun "console.log"))
       ((display) (mkfun "process.stdout.write"))
       ((error) (mkfun "console.error"))
-      (else (mkfun (function fun))))))
+      (else (mkunkwn (function fun))))))
 
 (define (arg-list args)
   (if (list? args)
@@ -172,12 +179,16 @@ function apply(x) {
               (++ (car args) "." (fun :name) "(" (join (cdr args)) ")"))
             ((:trans)
               ((fun :fun) args))
+            ((:unknown)
+              (++ "guess(" (fun :name) (if (truthy? (length args)) ", " "")
+                   args-joined ")"))
             (else
               (error:from-string
                 (++ "Got a bad form in function application: " fun))))))
       ((:lambda :define-fun)
         (++ "(" (codegen fun) ")(" args-joined ")"))
-      (else (++ (codegen fun) "[" args-joined "]")))))
+      (else (++ "guess(" (codegen fun) (if (truthy? (length args)) ", " "")
+                args-joined ")")))))
 
 (define (codegen val)
   (case (val :type)

@@ -1,3 +1,7 @@
 (write (#{:key "hash-val"} :key))
 (write ({"vec-val"} 0))
+(define vec {"vec-val"})
+(write (vec 0))
 (write ((lambda (x) x) "function-application"))
+(define (id x) x)
+(write (id "function-application"))
