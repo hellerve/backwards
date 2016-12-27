@@ -13,6 +13,14 @@ function sub() {
 function isnil(val) {
   return val === null;
 }
+function makeHash() {
+  var hashfun = (elem) => 'zepto_key' + elem.toString(); // TODO: make this foolproof
+  var hash = {};
+  for (var k = 0; k < arguments.length; k+=2) {
+    hash[hashfun(arguments[k])] = arguments[k+1];
+  }
+  return hash;
+}
 function concat() {
   var concattr = function(a,b) {
     if (a.constructor === Array) {
@@ -95,8 +103,11 @@ function apply(x) {
 (define (collec val)
   (join (map codegen (val :value))))
 
+(define (dict-key str)
+  (++ "\"" str "\""))
+
 (define (dict val)
-  (join (map ($ (++ (codegen (car %)) ": " (codegen (cadr %)))) (val :value))))
+  (join (map ($ (++ (dict-key (codegen (car %))) ": " (codegen (cadr %)))) (val :value))))
 
 (define (to-camel name)
   (let ((to-replace (regex:groups r/(-\w)/ name)))
@@ -138,7 +149,7 @@ function apply(x) {
       ((/= <>) (mkop "!="))
       ((++) (mkfun "concat"))
       ((+=) (mkfun "conj"))
-      ((list) (mktrans ($ (++ "[" (string:join % ", ") "]"))))
+      ((make-simple-list list) (mktrans ($ (++ "[" (string:join % ", ") "]"))))
       ((eqv?) (mkop "=="))
       ((eq? =) (mkop "==="))
       ((set!) (mkop "="))
