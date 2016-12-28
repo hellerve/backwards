@@ -1,99 +1,12 @@
-(define prologue "function add() {
-  return Array.from(arguments).reduce((a,b) => a + b, 0);
-}
-function mult() {
-  return Array.from(arguments).reduce((a,b) => a * b, 1);
-}
-function div() {
-  return [].slice.call(arguments, 1).reduce((a,b) => a / b, arguments[0]);
-}
-function sub() {
-  return [].slice.call(arguments, 1).reduce((a,b) => a - b, arguments[0]);
-}
-function isnil(val) {
-  return val === null;
-}
-function makeHash() {
-  var hashfun = (elem) => 'zepto_key' + elem.toString(); // TODO: make this foolproof
-  var hash = {};
-  for (var k = 0; k < arguments.length; k+=2) {
-    hash[hashfun(arguments[k])] = arguments[k+1];
-  }
-  return hash;
-}
-function concat() {
-  var concattr = function(a,b) {
-    if (a.constructor === Array) {
-      return a.concat(b);
-    } else if (a.constructor === String) {
-      return a + b;
-    } else if (a.length !== undefined && b.length !== undefined) {
-      var c = new a.constructor(a.length + b.length);
-      c.set(a);
-      c.set(b, a.length);
-
-      return c;
-    } else {
-      var c = new a.constructor(a.length + 1);
-      c.set(a);
-      c.set(new a.constructor([b]), a.length);
-
-      return c;
-    }
-  }
-  var ary = Array.from(arguments);
-  if (ary.length) {
-    return ary.slice(1).reduce(concattr, ary[0]);
-  }
-}
-function conj() {
-  var concattr = function(a,b) {
-    if (a.constructor === Array) {
-      var c = Object.assign([], a);
-      c.push(b);
-      return c;
-    } else if (a.constructor === String) {
-      return a + b;
-    } else {
-      var c = new a.constructor(a.length + 1);
-      c.set(a);
-      c.set(b, a.length);
-
-      return c;
-    }
-  }
-  var ary = Array.from(arguments);
-  if (ary.length) {
-    return ary.slice(1).reduce(concattr, ary[0]);
-  }
-}
-function guess(x, ...args) {
-  if (x.constructor === Array || x.constructor === Object) {
-    return args.reduce((a,b) => a[b], x);
-  }
-  return apply(x, args);
-}
-function isNull(x) {
-  return x.length == 0;
-}
-function car(x) {
-  return x[0];
-}
-function cdr(x) {
-  return x.slice(1);
-}
-function apply(x) {
-  return x.apply(null, [].slice.call(arguments, 1).reduce((a,b) => a.concat(b), []));
-}
-")
+(define prologue (read-contents (car (zepto:find-on-path "bwdc/prologue.js"))))
 
 (define trans
   #{"+" "add"
     "*" "mult"
     "/" "div"
     "-" "sub"
-    "%" "gen"
     "++" "conj"
+    "apply" "apply"
     "+=" "concat"})
 
 (define (join args . joinr)
@@ -104,10 +17,13 @@ function apply(x) {
   (join (map codegen (val :value))))
 
 (define (dict-key str)
-  (++ "\"" str "\""))
+  (if (not (alleq? (car str) #\" (last str)))
+    (++ "\"" str "\"")
+    str))
 
 (define (dict val)
-  (join (map ($ (++ (dict-key (codegen (car %))) ": " (codegen (cadr %)))) (val :value))))
+  (join (map ($ (++ (dict-key (codegen (car %))) ": " (codegen (cadr %))))
+             (val :value))))
 
 (define (to-camel name)
   (let ((to-replace (regex:groups r/(-\w)/ name)))
@@ -124,11 +40,19 @@ function apply(x) {
       ($ (if (string:ends-with str "!") (++ "unsafe" (but-last str)) str))
       ($ (if (string:ends-with str "?") (++ "is" (but-last str)) str))))
 
+(define (rand-name)
+  (++ "gen_" (->string (randint (pow 2 32)))))
+
+(define (special-names name)
+  (case name
+    (("%") (rand-name))
+    (else name)))
+
 (define (function name)
   (let ((name (->string name)))
     (if (in? trans name)
-      (trans name)
-      (to-camel (no-interrobang (regex:gsub r/:/ "-" name))))))
+      (++ "zepto." (trans name))
+      (to-camel (no-interrobang (regex:gsub r/:/ "-" (special-names name)))))))
 
 (define (fun-name fun)
   (let ((mkfun   (lambda (name) (make-hash :name name :type :fun)))
@@ -147,20 +71,24 @@ function apply(x) {
       ((<=) (mkop "<="))
       ((<) (mkop "<"))
       ((/= <>) (mkop "!="))
-      ((++) (mkfun "concat"))
-      ((+=) (mkfun "conj"))
-      ((make-simple-list list) (mktrans ($ (++ "[" (string:join % ", ") "]"))))
+      ((++) (mkpropc "append"))
+      ((+=) (mkpropc "extend"))
+      ((make-simple-list) (mktrans ($ (++ "[" (string:join % ", ") "]"))))
+      ((make-hash) (mktrans ($ (++ "new zepto.HashMap(" (string:join % ", ") ")"))))
+      ((list) (mktrans ($ (++ "new zepto.List([" (string:join % ", ") "])"))))
       ((eqv?) (mkop "=="))
       ((eq? =) (mkop "==="))
       ((set!) (mkop "="))
-      ((null? list:null?) (mkfun "isNull"))
-      ((head list:car) (mkfun "car"))
-      ((tail list:cdr) (mkfun "cdr"))
+      ((null? list:null?) (mkpropc "empty"))
+      ((car head list:car) (mkpropc "car"))
+      ((cdr tail list:cdr) (mkpropc "cdr"))
       ((->string) (mkpropc "toString"))
       ((length) (mkprop "length"))
-      ((write newline) (mkfun "console.log"))
-      ((display) (mkfun "process.stdout.write"))
-      ((error) (mkfun "console.error"))
+      ((in?) (mkpropc "contains"))
+      ((write) (mktrans ($ (++ "console.log((" (car %) ").toString())"))))
+      ((newline) (mkfun "console.log"))
+      ((display) (mktrans ($ (++ "process.stdout.write((" (car %) ").toString())"))))
+      ((error) (mktrans ($ (++ "console.error((" (car %) ").toString())"))))
       (else (mkunkwn (function fun))))))
 
 (define (arg-list args)
@@ -172,6 +100,12 @@ function apply(x) {
         gen))
     (list (++ "..." (function (args :value))))))
 
+(define (declare-if-rest-arg args)
+  (if (and (list? args) (any? ($ (eq? (% :type) :rest)) args))
+    (let ((gen (map codegen args)))
+      (++ "var " (list:last gen) " = new zepto.List(" (list:last gen) ");\n"))
+    ""))
+
 (define (treat-app val)
   (let* ((fun (val :function))
          (args (arg-list (val :arguments)))
@@ -181,7 +115,7 @@ function apply(x) {
         (let ((fun (fun-name (fun :value))))
           (case (fun :type)
             ((:fun)
-              (++ (fun :name) "(" args-joined ")"))
+              (++ (function (fun :name)) "(" args-joined ")"))
             ((:op)
               (string:join args (++ " " (fun :name) " ")))
             ((:prop)
@@ -191,23 +125,23 @@ function apply(x) {
             ((:trans)
               ((fun :fun) args))
             ((:unknown)
-              (++ "guess(" (fun :name) (if (truthy? (length args)) ", " "")
-                   args-joined ")"))
+              (++ (function (fun :name)) ".call(undefined"
+                  (if (> (length args) 0) ", " "") args-joined ")"))
             (else
               (error:from-string
                 (++ "Got a bad form in function application: " fun))))))
       ((:lambda :define-fun)
         (++ "(" (codegen fun) ")(" args-joined ")"))
-      (else (++ "guess(" (codegen fun) (if (truthy? (length args)) ", " "")
-                args-joined ")")))))
+      (else (++ (codegen fun) ".call(undefined"
+                (if (> (length args) 0) ", " "") args-joined ")")))))
 
 (define (codegen val)
   (case (val :type)
-    ((:string :char) (++ "\"" (val :value) "\""))
+    ((:string :char) (++ "new zepto.Str(\"" (val :value) "\")"))
     ((:atom) (++ "\"" (cdr (->string (val :value))) "\""))
-    ((:list :vector) (++ "[" (collec val) "]"))
-    ((:hash-map) (++ "{" (dict val) "}"))
-    ((:byte-vector) (++ "new Uint8Array([" (collec val) "])"))
+    ((:list :vector) (++ "new zepto.List([" (collec val) "])"))
+    ((:hash-map) (++ "new zepto.HashMap({" (dict val) "})"))
+    ((:byte-vector) (++ "new zepto.ByteVector([" (collec val) "])"))
     ((:complex)
       (error:from-string "Complex numbers are not supported by this backend"))
     ((:rational)
@@ -219,6 +153,7 @@ function apply(x) {
     ((:define-fn)
       (++ "function " (codegen (val :name))
           "(" (join (arg-list (val :arguments))) ") {\n"
+            (declare-if-rest-arg (val :arguments))
             "return " (codegen (val :body)) ";\n"
           "}"))
     ((:seq)
@@ -228,7 +163,9 @@ function apply(x) {
               "return " (list:last ins) ";\n})()")))
     ((:lambda)
       (let ((args (arg-list (val :arguments))))
-        (++ "(" (join args) ") => \n" (codegen (val :body)))))
+        (++ "(" (join args) ") => {\n" 
+            (declare-if-rest-arg (val :arguments))
+            "return " (codegen (val :body)) ";\n}")))
     ((:symbol) (function (val :value)))
     ((:regex) (++ "/" (regex:pattern (val :value)) "/"))
     ((:nil) "null")

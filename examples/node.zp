@@ -1,4 +1,4 @@
 ; accessing the node runtime from zepto to make a file echo its own contents
-(define x (require "fs"))
+(define x (make-hash (require (->string "fs"))))
 
-(write (->string ((x "readFileSync") "examples/node.zp")))
+(write (->string ((x "readFileSync") (->string "examples/node.zp"))))

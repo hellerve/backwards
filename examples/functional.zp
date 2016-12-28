@@ -81,6 +81,15 @@
 (define (juxt . fs)
   (lambda args (map ($ (apply % args)) fs)))
 
+
+(define (hash:set hash key value) "sets the hashmaps key value pair"
+  (make-hash hash (make-hash key value)))
+
+(define-syntax hash:set!
+  (syntax-rules ()
+    ((_ hash key value)
+      (set! hash (hash:set hash key value)))))
+
 (define (memoize f)
   (let ((cache #{}))
     (lambda args
@@ -129,7 +138,7 @@
             (apply f args)))))))
 
 ; pulled out to make unfold work
-(define cadr (compose car cdr))
+(define cadr ($ (car (cdr %))))
 
 (define (unfold next seed)
   (let loop ((acc [])
